@@ -4,9 +4,8 @@ import Header from "./components/Header";
 function App() {
   return (
     <>
-    <div className="flex items-center justify-center min-h-screen bg-gray-100">
-      <h1 className="text-4xl font-bold text-blue-500">Hello, Tailwind CSS!</h1>
-    </div>
+    <Header />
+      <h2 className="text-center text-white items-center mt-80">Main content under building...</h2>
     </>
   );
 }
