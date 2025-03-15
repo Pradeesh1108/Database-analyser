@@ -1,32 +1,66 @@
 import pandas as pd
 import sqlite3
+import json
+import ollama
 
-def load_csv(file):
-    data = pd.read_csv(file)
-    columns = data.columns
-    return (columns, data)
+def read_file(file):
+    datas = {}
 
-def load_excel(file):
-    data = pd.read_excel(file)
-    columns = data.columns
-    return (columns, data)
+    # Handling CSV files
+    if file.endswith('.csv'):
+        df = pd.read_csv(file)
+        datas["csv_data"] = {
+            "column_names": df.columns.tolist(),
+            "column_length": len(df.columns),
+            "row_contents": df.values.tolist(),
+            "row_length": len(df)
+        }
 
-def load_sqlite(file):
-    db = sqlite3.connect(file)
-    cur = db.cursor()
-    tables = cur.execute("SELECT name FROM sqlite_master WHERE type='table';").fetchall()
-    table_data = {}
-    table_columns = {}
+    # Handling Excel files
+    elif file.endswith('.xlsx'):
+        xls = pd.ExcelFile(file)
+        for sheet in xls.sheet_names:
+            df = xls.parse(sheet)
+            datas[sheet] = {
+                "column_names": df.columns.tolist(),
+                "column_length": len(df.columns),
+                "row_contents": df.values.tolist(),
+                "row_length": len(df)
+            }
 
-    for table in tables:
-        table_name = table[0]
-        cur.execute(f"SELECT * FROM {table_name} LIMIT 0")
-        columns = [description[0] for description in cur.description]
-        data = pd.read_sql_query(f"SELECT * FROM {table_name}", db)
-        table_columns[table_name] = columns
-        table_data[table_name] = data
+    # Handling SQLite Database
+    elif file.endswith('.db'):
+        conn = sqlite3.connect(file)
+        cur = conn.cursor()
 
-    db.close()
-    return (table_columns, table_data)
+        # Get all table names
+        cur.execute("SELECT name FROM sqlite_master WHERE type='table';")
+        tables = [row[0] for row in cur.fetchall()]
 
+        for table in tables:
+            # Get column names
+            cur.execute(f"PRAGMA table_info({table});")
+            columns = [row[1] for row in cur.fetchall()]
 
+            # Get table rows
+            cur.execute(f"SELECT * FROM {table}")
+            rows = cur.fetchall()
+
+            # Store data
+            datas[table] = {
+                "column_names": columns,
+                "column_length": len(columns),
+                "row_contents": rows,
+                "row_length": len(rows)
+            }
+
+        conn.close()
+
+    return datas
+
+# Example Usage
+file = 'inventory.db'  # Change to your file path
+data = read_file(file)
+
+# Pretty Print JSON Output
+# print(json.dumps(data, indent=4, ensure_ascii=False))
