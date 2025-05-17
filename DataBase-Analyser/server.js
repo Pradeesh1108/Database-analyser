@@ -28,13 +28,17 @@ const isProduction = process.env.NODE_ENV === 'production';
 // Configure Socket.IO for production or development
 const io = new Server(server, {
   cors: {
-    origin: isProduction ? process.env.VERCEL_URL || '*' : '*',
-    methods: ['GET', 'POST']
+    origin: isProduction ? [process.env.VERCEL_URL, process.env.PRODUCTION_URL || '*'] : '*',
+    methods: ['GET', 'POST'],
+    credentials: true
   },
   // Adding these options for Vercel deployment compatibility
-  transports: ['websocket', 'polling'],
+  transports: ['polling', 'websocket'], // Start with polling then upgrade to websocket
   path: '/socket.io/',
-  allowEIO3: true
+  allowEIO3: true,
+  connectTimeout: 20000,
+  pingTimeout: 60000,
+  maxHttpBufferSize: 1e8
 });
 
 const PORT = process.env.PORT || 5000;
@@ -443,5 +447,30 @@ if (!isProduction) {
   });
 }
 
-// Export for Vercel serverless function
-export default app;
+// Add CORS headers for Socket.IO requests in Vercel environment
+if (isProduction) {
+  app.use((req, res, next) => {
+    const allowedOrigins = [process.env.VERCEL_URL, process.env.PRODUCTION_URL || '*'];
+    const origin = req.headers.origin;
+    
+    if (allowedOrigins.includes('*') || allowedOrigins.includes(origin)) {
+      res.header('Access-Control-Allow-Origin', origin);
+      res.header('Access-Control-Allow-Methods', 'GET,POST');
+      res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, session-id');
+      res.header('Access-Control-Allow-Credentials', true);
+    }
+    
+    next();
+  });
+}
+
+// Export configuration for Vercel serverless functions
+export default async (req, res) => {
+  // For WebSocket handling, we must use the standard export
+  if (!res) {
+    return server;
+  }
+  
+  // For HTTP requests, allow Express to handle everything
+  return app(req, res);
+}
