@@ -1,26 +1,43 @@
-import React from 'react'
+import React from 'react';
+import PropTypes from 'prop-types';
 
-const ChatBubble = ({text, isUser}) => {
+const ChatBubble = ({ text, isUser }) => {
+  const baseClass = "px-4 py-3 rounded-lg max-w-3/4 break-words shadow-sm animate-fade-in";
+  const userClasses = "bg-primary-100 dark:bg-primary-800 text-primary-800 dark:text-primary-100 ml-auto rounded-br-none";
+  const botClasses = "bg-neutral-100 dark:bg-dark-card text-neutral-800 dark:text-dark-primary mr-auto rounded-bl-none";
+
   return (
-    <div className={`flex ${isUser ? "justify-end" : "justify-start"} mb-4`}>
-      <div className="flex flex-col items-start mx-2">
-        <h4 className={`text-sm font-medium mb-1 ${
-          isUser ? "text-gray-100" : "text-gray-100"
-        }`}>
-          {isUser ? "User" : "Bot"}
-        </h4>
-        <div
-          className={`max-w-xs p-4 rounded-2xl shadow-md ${
-            isUser
-              ? "bg-blue-500 text-white"
-              : "bg-gray-100 text-gray-800"
-          }`}
-        >
-          <p className="text-sm">{text}</p>
-        </div>
-      </div>
+    <div className={`${baseClass} ${isUser ? userClasses : botClasses} transform transition-all duration-300 hover:scale-[1.01]`}>
+      {text}
     </div>
-  )
-}
+  );
+};
 
-export default ChatBubble
+// Add the fade-in animation at the global CSS level
+const addFadeInAnimation = () => {
+  // Check if the animation already exists
+  if (!document.querySelector('#fade-in-animation')) {
+    const styleSheet = document.createElement('style');
+    styleSheet.id = 'fade-in-animation';
+    styleSheet.innerHTML = `
+      @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+      .animate-fade-in {
+        animation: fadeIn 0.3s ease-out forwards;
+      }
+    `;
+    document.head.appendChild(styleSheet);
+  }
+};
+
+// Execute once when component is imported
+addFadeInAnimation();
+
+ChatBubble.propTypes = {
+  text: PropTypes.string.isRequired,
+  isUser: PropTypes.bool.isRequired
+};
+
+export default ChatBubble;

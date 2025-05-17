@@ -3,3 +3,13 @@
 body{
      background-color: #1A1A1D;
 }
+
+:root {
+     --transition-duration: 0.3s;
+   }
+   
+   * {
+     transition-property: color, background-color, border-color, text-decoration-color, fill, stroke;
+     transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+     transition-duration: var(--transition-duration);
+   }

@@ -1,16 +1,34 @@
+import React, { useEffect, useState } from 'react';
 import "../css/header.css";
+import { FiDatabase } from 'react-icons/fi';
+import { useTheme } from '../context/ThemeContext';
 
-const Header = () => {
+const Header = ({ sessionId }) => {
+  const { theme } = useTheme();
+  const [showConnectionStatus, setShowConnectionStatus] = useState(false);
+  const truncatedSessionId = sessionId ? sessionId.substring(0, 6) : 'Not Connected';
+  const isConnected = sessionId ? true : false;
+  
+  useEffect(() => {
+    // Flash the connection status when it changes
+    if (sessionId || sessionId === '') {
+      setShowConnectionStatus(true);
+      const timer = setTimeout(() => {
+        setShowConnectionStatus(false);
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [sessionId]);
+  
   return (
-    <div className="h-10 flex items-center justify-center bg-[#232D3F] text-amber-50">
-      <div className="w-20 ml-4.5 flex-none">Icon</div>
-      <div className="w-64 flex-1 text-center">Database Analyser</div>
-      <div className="w-55 flex">
-        <ul className="flex gap-5">
-          <li><button className="nav-buttons">Home</button></li>
-          <li><button className="nav-buttons">About</button></li>
-          <li><button className="nav-buttons">Contat</button></li>
-        </ul>
+    <div className="h-14 flex items-center justify-between bg-gray-600 px-4 shadow-sm transition-all duration-300">
+      <div className="flex items-center">
+        <div className="text-2xl mr-2 text-primary-500 transition-transform duration-300 transform hover:scale-110">
+          <FiDatabase className={isConnected ? 'animate-pulse' : ''} />
+        </div>
+        <div className="text-xl text-white font-semibold bg-gradient-to-r from-primary-500 to-secondary-500 bg-clip-text">
+          Database Analyser
+        </div>
       </div>
     </div>
   );

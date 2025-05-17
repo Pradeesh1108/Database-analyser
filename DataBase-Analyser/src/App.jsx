@@ -1,13 +1,45 @@
+import { useEffect, useState } from "react";
+import { io } from "socket.io-client";
 import "./App.css";
 import ChatArea from "./components/ChatArea";
 import Header from "./components/Header";
+import { ThemeProvider } from "./context/ThemeContext";
 
 function App() {
+  const [socket, setSocket] = useState(null);
+  const [sessionId, setSessionId] = useState('');
+
+  useEffect(() => {
+    // Initialize socket connection
+    const socketInstance = io("http://localhost:5000");
+    
+    socketInstance.on("connect", () => {
+      console.log("Connected with ID:", socketInstance.id);
+      setSessionId(socketInstance.id);
+    });
+    
+    socketInstance.on("disconnect", () => {
+      console.log("Disconnected from server");
+      setSessionId('');
+    });
+    
+    setSocket(socketInstance);
+    
+    // Clean up on component unmount
+    return () => {
+      socketInstance.disconnect();
+    };
+  }, []);
+
   return (
-    <>
-    <Header />
-    <ChatArea />
-    </>
+    <ThemeProvider>
+      <div className="flex flex-col h-screen bg-dark-surface transition-colors duration-300">
+        <Header sessionId={sessionId} />
+        <div className="flex-1 overflow-hidden">
+          <ChatArea socket={socket} />
+        </div>
+      </div>
+    </ThemeProvider>
   );
 }
 
