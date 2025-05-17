@@ -21,12 +21,22 @@ const sqliteVerbose = sqlite3.verbose();
 
 const app = express();
 const server = http.createServer(app);
+
+// Check if we're in production (Vercel environment)
+const isProduction = process.env.NODE_ENV === 'production';
+
+// Configure Socket.IO for production or development
 const io = new Server(server, {
   cors: {
-    origin: '*',
+    origin: isProduction ? process.env.VERCEL_URL || '*' : '*',
     methods: ['GET', 'POST']
-  }
+  },
+  // Adding these options for Vercel deployment compatibility
+  transports: ['websocket', 'polling'],
+  path: '/socket.io/',
+  allowEIO3: true
 });
+
 const PORT = process.env.PORT || 5000;
 
 // Session storage for multiple users (in-memory for simplicity)
@@ -38,10 +48,13 @@ const databaseCache = new Map();
 app.use(cors());
 app.use(express.json());
 
+// Configure upload directory based on environment
+const UPLOADS_DIR = isProduction ? '/tmp/uploads' : 'uploads/';
+
 // Configure multer for file uploads
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, 'uploads/');
+    cb(null, UPLOADS_DIR);
   },
   filename: (req, file, cb) => {
     cb(null, Date.now() + '-' + file.originalname);
@@ -52,12 +65,17 @@ const upload = multer({ storage });
 // Ensure uploads directory exists
 (async () => {
   try {
-    await fs.mkdir('uploads', { recursive: true });
+    await fs.mkdir(UPLOADS_DIR, { recursive: true });
     console.log('Uploads directory created or already exists');
   } catch (err) {
     console.error('Error creating uploads directory:', err);
   }
 })();
+
+// If in production, serve static files from the build directory
+if (isProduction) {
+  app.use(express.static('dist'));
+}
 
 // Initialize Google Generative AI
 // Replace with your actual API key
@@ -122,7 +140,7 @@ io.on('connection', (socket) => {
         return;
       }
       
-      const filePath = path.join('uploads/', filename);
+      const filePath = path.join(UPLOADS_DIR, filename);
       const fileExists = await fs.access(filePath).then(() => true).catch(() => false);
       
       if (!fileExists) {
@@ -170,7 +188,7 @@ io.on('connection', (socket) => {
       // Clean up any uploaded files
       if (userSession.activeFile) {
         try {
-          const filePath = path.join('uploads/', userSession.activeFile);
+          const filePath = path.join(UPLOADS_DIR, userSession.activeFile);
           
           // Check if this file is used by other active sessions
           let isFileUsedByOthers = false;
@@ -203,7 +221,7 @@ io.on('connection', (socket) => {
             // Skip the active file as it was already handled above
             if (filename === userSession.activeFile) continue;
             
-            const filePath = path.join('uploads/', filename);
+            const filePath = path.join(UPLOADS_DIR, filename);
             
             // Check if this file is used by other active sessions
             let isFileUsedByOthers = false;
@@ -242,7 +260,7 @@ io.on('connection', (socket) => {
 async function processMessageWithAI(message, filename, parsedDbData) {
   try {
     if (!parsedDbData) {
-      const filePath = path.join('uploads/', filename);
+      const filePath = path.join(UPLOADS_DIR, filename);
       const fileExists = await fs.access(filePath).then(() => true).catch(() => false);
       
       if (!fileExists) {
@@ -384,7 +402,7 @@ app.post('/api/upload', upload.single('dbFile'), async (req, res) => {
 app.get('/api/structure/:filename', async (req, res) => {
   try {
     const { filename } = req.params;
-    const filePath = path.join('uploads/', filename);
+    const filePath = path.join(UPLOADS_DIR, filename);
     const fileExists = await fs.access(filePath).then(() => true).catch(() => false);
     
     if (!fileExists) {
@@ -411,7 +429,19 @@ app.get('/api/structure/:filename', async (req, res) => {
   }
 });
 
-// Start server
-server.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
+// Route for serving the React app in production
+if (isProduction) {
+  app.get('*', (req, res) => {
+    res.sendFile(path.resolve('dist', 'index.html'));
+  });
+}
+
+// Start server if not in production (Vercel will handle this in production)
+if (!isProduction) {
+  server.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+  });
+}
+
+// Export for Vercel serverless function
+export default app;

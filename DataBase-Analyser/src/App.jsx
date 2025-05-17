@@ -10,8 +10,19 @@ function App() {
   const [sessionId, setSessionId] = useState('');
 
   useEffect(() => {
-    // Initialize socket connection
-    const socketInstance = io("http://localhost:5000");
+    // Determine the backend URL based on environment
+    const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    const socketUrl = isDevelopment 
+      ? "http://localhost:5000"
+      : window.location.origin; // In production, connect to the same origin
+    
+    // Initialize socket connection with appropriate options
+    const socketInstance = io(socketUrl, {
+      path: '/socket.io/',
+      transports: ['websocket', 'polling'],
+      reconnectionAttempts: 5,
+      reconnectionDelay: 1000,
+    });
     
     socketInstance.on("connect", () => {
       console.log("Connected with ID:", socketInstance.id);
@@ -21,6 +32,10 @@ function App() {
     socketInstance.on("disconnect", () => {
       console.log("Disconnected from server");
       setSessionId('');
+    });
+    
+    socketInstance.on("connect_error", (error) => {
+      console.error("Socket connection error:", error);
     });
     
     setSocket(socketInstance);
