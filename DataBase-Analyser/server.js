@@ -2,7 +2,7 @@ import express from 'express';
 import multer from 'multer';
 import cors from 'cors';
 import path from 'path';
-import { promises as fs } from 'fs';
+import { promises as fs, existsSync } from 'fs';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import http from 'http';
 import { Server } from 'socket.io';
@@ -72,7 +72,8 @@ io.on('connection', (socket) => {
   userSessions.set(socket.id, {
     activeFile: null,
     chatHistory: [],
-    parsedDbData: null
+    parsedDbData: null,
+    uploadedFiles: [] // Array to track files uploaded by this user
   });
   
   // Handle chat messages
@@ -160,8 +161,78 @@ io.on('connection', (socket) => {
   });
   
   // Handle disconnect
-  socket.on('disconnect', () => {
+  socket.on('disconnect', async () => {
     console.log('User disconnected:', socket.id);
+    
+    // Get user session
+    const userSession = userSessions.get(socket.id);
+    if (userSession) {
+      // Clean up any uploaded files
+      if (userSession.activeFile) {
+        try {
+          const filePath = path.join('uploads/', userSession.activeFile);
+          
+          // Check if this file is used by other active sessions
+          let isFileUsedByOthers = false;
+          for (const [sessionId, session] of userSessions.entries()) {
+            if (sessionId !== socket.id && session.activeFile === userSession.activeFile) {
+              isFileUsedByOthers = true;
+              break;
+            }
+          }
+          
+          // Only delete the file if no other session is using it
+          if (!isFileUsedByOthers) {
+            if (existsSync(filePath)) {
+              await fs.unlink(filePath);
+              console.log(`Deleted file: ${userSession.activeFile}`);
+              
+              // Also remove from cache
+              databaseCache.delete(userSession.activeFile);
+            }
+          }
+        } catch (error) {
+          console.error(`Error deleting file: ${error.message}`);
+        }
+      }
+      
+      // Also clean up any other files uploaded by this user
+      if (userSession.uploadedFiles && userSession.uploadedFiles.length > 0) {
+        for (const filename of userSession.uploadedFiles) {
+          try {
+            // Skip the active file as it was already handled above
+            if (filename === userSession.activeFile) continue;
+            
+            const filePath = path.join('uploads/', filename);
+            
+            // Check if this file is used by other active sessions
+            let isFileUsedByOthers = false;
+            for (const [sessionId, session] of userSessions.entries()) {
+              if (sessionId !== socket.id && 
+                 (session.activeFile === filename || 
+                 (session.uploadedFiles && session.uploadedFiles.includes(filename)))) {
+                isFileUsedByOthers = true;
+                break;
+              }
+            }
+            
+            // Only delete if not used by others
+            if (!isFileUsedByOthers) {
+              if (existsSync(filePath)) {
+                await fs.unlink(filePath);
+                console.log(`Deleted file: ${filename}`);
+                
+                // Also remove from cache
+                databaseCache.delete(filename);
+              }
+            }
+          } catch (error) {
+            console.error(`Error deleting file: ${error.message}`);
+          }
+        }
+      }
+    }
+    
     // Clean up user session
     userSessions.delete(socket.id);
   });
@@ -274,7 +345,14 @@ app.post('/api/upload', upload.single('dbFile'), async (req, res) => {
     // If user has a session ID, associate file with their session
     const sessionId = req.headers['session-id'];
     if (sessionId && userSessions.has(sessionId)) {
-      userSessions.get(sessionId).activeFile = req.file.filename;
+      const userSession = userSessions.get(sessionId);
+      userSession.activeFile = req.file.filename;
+      
+      // Add to the user's uploaded files list
+      if (!userSession.uploadedFiles) {
+        userSession.uploadedFiles = [];
+      }
+      userSession.uploadedFiles.push(req.file.filename);
       
       // Process the file asynchronously
       dbParser.parseFile(req.file.path)
@@ -282,7 +360,7 @@ app.post('/api/upload', upload.single('dbFile'), async (req, res) => {
           // Cache the parsed data
           databaseCache.set(req.file.filename, parsedData);
           // Update the user session
-          userSessions.get(sessionId).parsedDbData = parsedData;
+          userSession.parsedDbData = parsedData;
           
           // Notify client that analysis is complete
           io.to(sessionId).emit('database_structure', parsedData);
